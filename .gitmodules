@@ -1,0 +1,4 @@
+[submodule "modules/curl"]
+	path = modules/curl
+	url = https://github.com/curl/curl
+	
