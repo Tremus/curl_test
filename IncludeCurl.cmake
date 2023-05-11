@@ -9,6 +9,8 @@ set(BUILD_SHARED_LIBS OFF)
 # https://curl.se/docs/ssl-compared.html
 if (APPLE)
     set(CURL_USE_SECTRANSP ON)
+elseif(WIN32)    
+    set(CURL_USE_SCHANNEL ON)
 endif()
 
 # disable extras
