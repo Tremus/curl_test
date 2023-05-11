@@ -26,6 +26,12 @@ endif()
 # https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Alt-Svc?retiredLocale=uk
 set(CURL_DISABLE_ALTSVC ON)
 set(CURL_DISABLE_COOKIES ON)
+# Used for HTTP auth (not https) and SASL
+# https://curl.se/mail/lib-2018-03/0000.html
+# https://en.wikipedia.org/wiki/Digest_access_authentication
+# https://en.wikipedia.org/wiki/Simple_Authentication_and_Security_Layer
+# Don't need
+set(CURL_DISABLE_CRYPTO_AUTH ON)
 
 # doubt we'll use this
 # https://en.wikipedia.org/wiki/DICT
@@ -80,6 +86,9 @@ set(CURL_DISABLE_TELNET ON)
 # nah https://en.wikipedia.org/wiki/Trivial_File_Transfer_Protocol
 set(CURL_DISABLE_TFTP ON)
 set(CURL_DISABLE_VERBOSE_STRINGS ON)
+
+set(CURL_ENABLE_EXPORT_TARGET OFF)
+set(ENABLE_THREADED_RESOLVER OFF)
 
 add_subdirectory(modules/curl)
 
