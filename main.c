@@ -3,64 +3,81 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct memory
+struct https_response
 {
-    char* response;
+    char* body;
     size_t size;
+    long status;
 };
 
-static size_t cb(void* data, size_t size, size_t nmemb, void* clientp)
+static size_t https_request_cb(void* data, size_t size, size_t nmemb,
+                               void* clientp)
 {
-    size_t realsize    = size * nmemb;
-    struct memory* mem = (struct memory*)clientp;
+    size_t realsize            = size * nmemb;
+    struct https_response* mem = (struct https_response*)clientp;
 
-    char* ptr = realloc(mem->response, mem->size + realsize + 1);
+    char* ptr = realloc(mem->body, mem->size + realsize + 1);
     if (ptr == NULL)
         return 0; /* out of memory! */
 
-    mem->response = ptr;
-    memcpy(&(mem->response[mem->size]), data, realsize);
+    mem->body = ptr;
+    memcpy(&(mem->body[mem->size]), data, realsize);
     mem->size += realsize;
-    mem->response[mem->size] = 0;
+    mem->body[mem->size] = 0;
 
     return realsize;
 };
+
+// Use this for simple GET requests
+static CURLcode https_get(CURL* session_handle, const char* url,
+                          struct https_response* res)
+{
+    /* send all data to this function  */
+    curl_easy_setopt(session_handle, CURLOPT_WRITEFUNCTION, https_request_cb);
+
+    /* we pass our 'res' struct to the callback function */
+    curl_easy_setopt(session_handle, CURLOPT_WRITEDATA, (void*)&res);
+
+    curl_easy_setopt(session_handle, CURLOPT_URL, "https://example.com/");
+
+    /* send a request */
+    CURLcode code = curl_easy_perform(session_handle);
+
+    curl_easy_getinfo(session_handle, CURLINFO_RESPONSE_CODE, &res->status);
+    return code;
+}
 
 // Useful examples:
 // https://curl.se/libcurl/c/https.html
 // https://curl.se/libcurl/c/CURLOPT_WRITEFUNCTION.html
 int main()
 {
-    CURLcode res;
-    struct memory chunk = {0};
-    CURL* curl_handle   = curl_easy_init();
-    long http_code      = 0;
+    CURLcode code;
+    struct https_response res = {0, 0, 0};
+    CURL* session             = curl_easy_init();
 
     curl_global_init(CURL_GLOBAL_DEFAULT);
 
-    if (curl_handle)
+    if (session)
     {
-        /* send all data to this function  */
-        curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, cb);
+        code = https_get(session, "https://example.com/", &res);
 
-        /* we pass our 'chunk' struct to the callback function */
-        curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void*)&chunk);
-
-        curl_easy_setopt(curl_handle, CURLOPT_URL, "https://example.com/");
-
-        /* send a request */
-        res = curl_easy_perform(curl_handle);
-
-        curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &http_code);
-
-        printf("HTTP Code: %ld\n", http_code);
-        printf("Response length: %lu\n", chunk.size);
-        printf("Response: %s\n", chunk.response);
+        if (code == CURLE_OK)
+        {
+            printf("HTTP Status: %ld\n", res.status);
+            printf("Response length: %llu\n", res.size);
+            printf("Response: %s\n", res.body);
+        }
+        else
+        {
+            fprintf(stderr, "curl_easy_perform() failed: %s\n",
+                    curl_easy_strerror(code));
+        }
 
         /* remember to free the buffer */
-        free(chunk.response);
+        free(res.body);
 
-        curl_easy_cleanup(curl_handle);
+        curl_easy_cleanup(session);
     }
 
     curl_global_cleanup();
