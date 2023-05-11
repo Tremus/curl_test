@@ -65,7 +65,7 @@ int main()
         if (code == CURLE_OK)
         {
             printf("HTTP Status: %ld\n", res.status);
-            printf("Response length: %llu\n", res.size);
+            printf("Response length: %zu\n", res.size);
             printf("Response: %s\n", res.body);
         }
         else
