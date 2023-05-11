@@ -29,21 +29,21 @@ static size_t https_request_cb(void* data, size_t size, size_t nmemb,
 };
 
 // Use this for simple GET requests
-static CURLcode https_get(CURL* session_handle, const char* url,
-                          struct https_response* res)
+static CURLcode https_get(CURL* session, struct https_response* res,
+                          const char* url)
 {
     /* send all data to this function  */
-    curl_easy_setopt(session_handle, CURLOPT_WRITEFUNCTION, https_request_cb);
+    curl_easy_setopt(session, CURLOPT_WRITEFUNCTION, https_request_cb);
 
-    /* we pass our 'res' struct to the callback function */
-    curl_easy_setopt(session_handle, CURLOPT_WRITEDATA, (void*)&res);
+    /* we pass our 'https_response' struct to the callback function */
+    curl_easy_setopt(session, CURLOPT_WRITEDATA, (void*)res);
 
-    curl_easy_setopt(session_handle, CURLOPT_URL, "https://example.com/");
+    curl_easy_setopt(session, CURLOPT_URL, url);
 
     /* send a request */
-    CURLcode code = curl_easy_perform(session_handle);
+    CURLcode code = curl_easy_perform(session);
 
-    curl_easy_getinfo(session_handle, CURLINFO_RESPONSE_CODE, &res->status);
+    curl_easy_getinfo(session, CURLINFO_RESPONSE_CODE, &res->status);
     return code;
 }
 
@@ -60,7 +60,7 @@ int main()
 
     if (session)
     {
-        code = https_get(session, "https://example.com/", &res);
+        code = https_get(session, &res, "https://example.com/");
 
         if (code == CURLE_OK)
         {
@@ -76,7 +76,6 @@ int main()
 
         /* remember to free the buffer */
         free(res.body);
-
         curl_easy_cleanup(session);
     }
 
