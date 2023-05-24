@@ -1,4 +1,6 @@
 #include <curl/curl.h>
+#include <stdatomic.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,35 +10,54 @@ static struct curl_slist POST_HEADERS[] = {
 
 struct https_response
 {
+    CURL* session;
     char* body;
     size_t size;
     long status;
+    atomic_bool cancel_request;
 };
 
-static size_t
-https_request_cb(void* data, size_t size, size_t nmemb, void* clientp)
+int https_progress_callback(void* clientp, curl_off_t dltotal, curl_off_t dlnow,
+                            curl_off_t ultotal, curl_off_t ulnow)
+{
+    struct https_response* res = (struct https_response*)clientp;
+    if (atomic_load(&res->cancel_request))
+    {
+        printf("Cancelling request at size: %zu\n", res->size);
+        return 1;
+    }
+    else
+        return CURL_PROGRESSFUNC_CONTINUE;
+}
+
+static size_t https_request_cb(void* data, size_t size, size_t nmemb,
+                               void* clientp)
 {
     size_t realsize            = size * nmemb;
-    struct https_response* mem = (struct https_response*)clientp;
+    struct https_response* res = (struct https_response*)clientp;
 
-    char* ptr = realloc(mem->body, mem->size + realsize + 1);
+    char* ptr = realloc(res->body, res->size + realsize + 1);
     if (ptr == NULL)
         return 0; /* out of memory! */
 
-    mem->body = ptr;
-    memcpy(&(mem->body[mem->size]), data, realsize);
-    mem->size += realsize;
-    mem->body[mem->size] = 0;
+    res->body = ptr;
+    memcpy(&(res->body[res->size]), data, realsize);
+    res->size += realsize;
+    res->body[res->size] = 0;
 
     return realsize;
 };
 
 // Use this for simple GET requests
-static CURLcode
-https_get(CURL* session, struct https_response* res, const char* url)
+static CURLcode https_get(CURL* session, struct https_response* res,
+                          const char* url)
 {
     /* send all data to this function  */
     curl_easy_setopt(session, CURLOPT_WRITEFUNCTION, https_request_cb);
+    curl_easy_setopt(session, CURLOPT_NOPROGRESS, 0);
+    curl_easy_setopt(session, CURLOPT_XFERINFODATA, (void*)res);
+    curl_easy_setopt(session, CURLOPT_XFERINFOFUNCTION,
+                     https_progress_callback);
 
     /* we pass our 'https_response' struct to the callback function */
     curl_easy_setopt(session, CURLOPT_WRITEDATA, (void*)res);
@@ -51,14 +72,15 @@ https_get(CURL* session, struct https_response* res, const char* url)
 }
 
 // Use this for simple JSON POST requests
-static CURLcode https_post_json(
-    CURL* session,
-    struct https_response* res,
-    const char* url,
-    const char* postdata)
+static CURLcode https_post_json(CURL* session, struct https_response* res,
+                                const char* url, const char* postdata)
 {
     /* send all data to this function  */
     curl_easy_setopt(session, CURLOPT_WRITEFUNCTION, https_request_cb);
+    curl_easy_setopt(session, CURLOPT_NOPROGRESS, 0);
+    curl_easy_setopt(session, CURLOPT_XFERINFODATA, (void*)res);
+    curl_easy_setopt(session, CURLOPT_XFERINFOFUNCTION,
+                     https_progress_callback);
 
     /* we pass our 'https_response' struct to the callback function */
     curl_easy_setopt(session, CURLOPT_WRITEDATA, (void*)res);
@@ -80,65 +102,74 @@ static CURLcode https_post_json(
 int main()
 {
     CURLcode code;
-    struct https_response res;
-    CURL* session = curl_easy_init();
+    struct https_response* res = malloc(sizeof(struct https_response));
+
+    res->session = curl_easy_init();
+    res->body    = NULL;
+    res->size    = 0;
+    res->status  = 0;
+    atomic_init(&res->cancel_request, false);
 
     curl_global_init(CURL_GLOBAL_DEFAULT);
 
     // Test GET
-    if (session)
+    if (res->session)
     {
-        memset(&res, 0, sizeof(res));
-        code = https_get(session, &res, "https://example.com/");
+        code = https_get(res->session, res, "https://example.com/");
 
         if (code == CURLE_OK)
         {
-            printf("HTTP Status: %ld\n", res.status);
-            printf("Response length: %zu\n", res.size);
-            printf("Response: %s\n", res.body);
+            printf("HTTP Status: %ld\n", res->status);
+            printf("Response length: %zu\n", res->size);
+            printf("Response: %s\n", res->body);
         }
         else
         {
-            fprintf(
-                stderr,
-                "curl_easy_perform() failed: %s\n",
-                curl_easy_strerror(code));
+            fprintf(stderr, "curl_easy_perform() failed: %s\n",
+                    curl_easy_strerror(code));
         }
 
         /* remember to free the buffer */
-        free(res.body);
-        curl_easy_cleanup(session);
+        free(res->body);
+        res->body = NULL;
+        curl_easy_cleanup(res->session);
+        res->session = 0;
+        res->size    = 0;
+        res->status  = 0;
+        atomic_store(&res->cancel_request, false);
     }
 
     // Test POST
-    session = curl_easy_init();
-    if (session)
+    res->session = curl_easy_init();
+    if (res->session)
     {
-        memset(&res, 0, sizeof(res));
-        code = https_post_json(
-            session,
-            &res,
-            "https://httpbin.org/post",
-            "{\"greeting\": \"Bonjour\"}");
+
+        code = https_post_json(res->session, res, "https://httpbin.org/post",
+                               "{\"greeting\": \"Bonjour\"}");
 
         if (code == CURLE_OK)
         {
-            printf("HTTP Status: %ld\n", res.status);
-            printf("Response length: %zu\n", res.size);
-            printf("Response: %s\n", res.body);
+            printf("HTTP Status: %ld\n", res->status);
+            printf("Response length: %zu\n", res->size);
+            printf("Response: %s\n", res->body);
         }
         else
         {
-            fprintf(
-                stderr,
-                "curl_easy_perform() failed: %s\n",
-                curl_easy_strerror(code));
+            fprintf(stderr, "curl_easy_perform() failed: %s\n",
+                    curl_easy_strerror(code));
         }
 
         /* remember to free the buffer */
-        free(res.body);
-        curl_easy_cleanup(session);
+        free(res->body);
+        res->body = NULL;
+        curl_easy_cleanup(res->session);
+        res->session = 0;
+        res->size    = 0;
+        res->status  = 0;
+        atomic_store(&res->cancel_request, false);
     }
+    free(res);
+    res = NULL;
 
     curl_global_cleanup();
 
