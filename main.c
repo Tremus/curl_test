@@ -49,9 +49,9 @@ static size_t https_request_cb(void* data, size_t size, size_t nmemb,
 };
 
 // Use this for simple GET requests
-static CURLcode https_get(CURL* session, struct https_response* res,
-                          const char* url)
+static CURLcode https_get(struct https_response* res, const char* url)
 {
+    CURL* session = res->session;
     /* send all data to this function  */
     curl_easy_setopt(session, CURLOPT_WRITEFUNCTION, https_request_cb);
     curl_easy_setopt(session, CURLOPT_NOPROGRESS, 0);
@@ -72,9 +72,10 @@ static CURLcode https_get(CURL* session, struct https_response* res,
 }
 
 // Use this for simple JSON POST requests
-static CURLcode https_post_json(CURL* session, struct https_response* res,
-                                const char* url, const char* postdata)
+static CURLcode https_post_json(struct https_response* res, const char* url,
+                                const char* postdata)
 {
+    CURL* session = res->session;
     /* send all data to this function  */
     curl_easy_setopt(session, CURLOPT_WRITEFUNCTION, https_request_cb);
     curl_easy_setopt(session, CURLOPT_NOPROGRESS, 0);
@@ -115,7 +116,7 @@ int main()
     // Test GET
     if (res->session)
     {
-        code = https_get(res->session, res, "https://example.com/");
+        code = https_get(res, "https://example.com/");
 
         if (code == CURLE_OK)
         {
@@ -144,7 +145,7 @@ int main()
     if (res->session)
     {
 
-        code = https_post_json(res->session, res, "https://httpbin.org/post",
+        code = https_post_json(res, "https://httpbin.org/post",
                                "{\"greeting\": \"Bonjour\"}");
 
         if (code == CURLE_OK)
