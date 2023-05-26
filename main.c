@@ -6,7 +6,7 @@
 #include <string.h>
 
 static struct curl_slist POST_HEADERS[] = {
-    {.data = "Content-Type: applicaion/json", .next = NULL}};
+    {.data = "Content-Type: application/json", .next = NULL}};
 
 struct https_response
 {
